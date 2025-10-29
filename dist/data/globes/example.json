@@ -1,0 +1,21 @@
+{
+  "points": [
+    { "lon": -122.4194, "lat": 37.7749, "type": "land" },
+    { "lon": -74.0060, "lat": 40.7128, "type": "land" },
+    { "lon": 2.3522, "lat": 48.8566, "type": "land" },
+    { "lon": 139.6917, "lat": 35.6895, "type": "land" },
+    { "lon": 151.2093, "lat": -33.8688, "type": "land" },
+    { "lon": 77.2090, "lat": 28.6139, "type": "land" },
+    { "lon": -43.1729, "lat": -22.9068, "type": "land" },
+    { "lon": 37.6173, "lat": 55.7558, "type": "land" },
+    { "lon": 103.8198, "lat": 1.3521, "type": "land" },
+    { "lon": 18.4241, "lat": -33.9249, "type": "land" },
+    { "lon": 0, "lat": 0, "type": "water" },
+    { "lon": 30, "lat": -10, "type": "water" },
+    { "lon": -30, "lat": 10, "type": "water" }
+  ]
+}
+
+
+
+
