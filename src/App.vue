@@ -1,6 +1,5 @@
 <template>
   <GlobeThree />
-  
 </template>
 
 <script>
@@ -13,8 +12,18 @@ export default {
 </script>
 
 <style>
-/* App-level styles can go here if needed */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: #0a0a0a;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: Arial, sans-serif;
+}
 </style>
-
-
-
