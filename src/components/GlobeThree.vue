@@ -24,6 +24,8 @@ export default {
     let rotationX = 0, rotationY = 0
     let velocityX = 0, velocityY = 0
     const friction = 0.95
+    const autoRotationSpeed = 0.001 // Скорость автоматического вращения
+    const returnToAutoSpeed = 0.02 // Скорость возврата к автоматическому вращению
 
     const theme = ref('dark')
     const toggleTheme = () => {
@@ -36,7 +38,7 @@ export default {
       scene.background = new THREE.Color(theme.value === 'dark' ? '#0a0a0a' : '#f5f5f5')
       
       if (globe) {
-        globe.material.color = new THREE.Color(theme.value === 'dark' ? '#1a1a1a' : '#e0e0e0')
+        globe.material.color = new THREE.Color(theme.value === 'dark' ? '#000' : '#fff')
       }
       // rebuild points to switch land color for theme
       createPoints()
@@ -45,7 +47,7 @@ export default {
     const createGlobe = () => {
       // Scene
       scene = new THREE.Scene()
-      scene.background = new THREE.Color(theme.value === 'dark' ? '#0a0a0a' : '#f5f5f5')
+      scene.background = new THREE.Color(theme.value === 'dark' ? '#0a0a0a' : '#ffffff')
 
       // Use 70vh of display height (square)
       const size = Math.round(window.innerHeight * 0.7)
@@ -63,9 +65,9 @@ export default {
       // Globe sphere
       const geometry = new THREE.SphereGeometry(1, 64, 64)
       const material = new THREE.MeshBasicMaterial({ 
-        color: theme.value === 'dark' ? '#1a1a1a' : '#e0e0e0',
-        transparent: true,
-        opacity: 0.8
+        color: theme.value === 'dark' ? '#000000' : '#fffff',
+        transparent: false,
+        opacity: 1
       })
       globe = new THREE.Mesh(geometry, material)
       scene.add(globe)
@@ -74,14 +76,19 @@ export default {
       createPoints()
 
       // Lighting
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6)
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.1)
       scene.add(ambientLight)
 
-      // Event listeners
+      // Event listeners for mouse
       renderer.domElement.addEventListener('mousedown', onMouseDown)
       renderer.domElement.addEventListener('mousemove', onMouseMove)
       renderer.domElement.addEventListener('mouseup', onMouseUp)
       renderer.domElement.addEventListener('wheel', onWheel)
+
+      // Event listeners for touch
+      renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false })
+      renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false })
+      renderer.domElement.addEventListener('touchend', onTouchEnd)
     }
 
     const disposeMesh = (mesh) => {
@@ -116,10 +123,10 @@ export default {
           const y = Math.cos(phi)
           const z = Math.sin(phi) * Math.sin(theta)
           
-          const px = x * 1.01, py = y * 1.01, pz = z * 1.01
+          const px = x, py = y,  pz = z
           if (point.type === 'ocean') {
             oceanPositions.push(px, py, pz)
-            oceanColors.push(0.5, 0.5, 0.5)
+            oceanColors.push(0.1, 0.1, 0.1)
           } else {
             landPositions.push(px, py, pz)
             if (theme.value === 'dark') {
@@ -135,7 +142,7 @@ export default {
           landGeometry.setAttribute('position', new THREE.Float32BufferAttribute(landPositions, 3))
           landGeometry.setAttribute('color', new THREE.Float32BufferAttribute(landColors, 3))
           const landMaterial = new THREE.PointsMaterial({
-            size: 0.01,
+            size: 0.002,
             vertexColors: true,
             transparent: true,
             opacity: 0.8
@@ -162,10 +169,12 @@ export default {
       }
     }
 
+    // Mouse event handlers
     const onMouseDown = (event) => {
       isDragging = true
       lastMouseX = event.clientX
       lastMouseY = event.clientY
+      event.preventDefault()
     }
 
     const onMouseMove = (event) => {
@@ -179,6 +188,7 @@ export default {
       
       lastMouseX = event.clientX
       lastMouseY = event.clientY
+      event.preventDefault()
     }
 
     const onMouseUp = () => {
@@ -189,16 +199,55 @@ export default {
       const factor = event.deltaY > 0 ? 0.9 : 1.1
       velocityX *= factor
       velocityY *= factor
+      event.preventDefault()
+    }
+
+    // Touch event handlers
+    const onTouchStart = (event) => {
+      if (event.touches.length === 1) {
+        isDragging = true
+        lastMouseX = event.touches[0].clientX
+        lastMouseY = event.touches[0].clientY
+      }
+      event.preventDefault()
+    }
+
+    const onTouchMove = (event) => {
+      if (!isDragging || event.touches.length !== 1) return
+      
+      const deltaX = event.touches[0].clientX - lastMouseX
+      const deltaY = event.touches[0].clientY - lastMouseY
+      
+      velocityX = deltaX * 0.01
+      velocityY = deltaY * 0.01
+      
+      lastMouseX = event.touches[0].clientX
+      lastMouseY = event.touches[0].clientY
+      event.preventDefault()
+    }
+
+    const onTouchEnd = () => {
+      isDragging = false
     }
 
     const animate = () => {
       if (!isDragging) {
+        // Apply friction
         velocityX *= friction
         velocityY *= friction
+        
+        // Gradually return to auto-rotation if velocities are very small
+        if (Math.abs(velocityX) < 0.0005 && Math.abs(velocityY) < 0.0005) {
+          velocityX += (autoRotationSpeed - velocityX) * returnToAutoSpeed
+          velocityY += (0 - velocityY) * returnToAutoSpeed
+        }
       }
       
       rotationY += velocityX
       rotationX += velocityY
+      
+      // Limit vertical rotation to avoid flipping
+      rotationX = Math.max(-Math.PI/2, Math.min(Math.PI/2, rotationX))
       
       if (globe) {
         globe.rotation.x = rotationX
@@ -263,6 +312,7 @@ export default {
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  touch-action: none; /* Important for touch controls */
 }
 
 .globe-container.dark {
@@ -305,9 +355,18 @@ export default {
   width: 100%;
   height: 100%;
   cursor: grab;
+  touch-action: none; /* Important for touch controls */
 }
 
 .globe-wrapper:active {
   cursor: grabbing;
+}
+
+/* Prevent text selection during interaction */
+.globe-wrapper {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
 }
 </style>

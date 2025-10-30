@@ -16,7 +16,7 @@ export default {
     y: { type: Number, required: true },
     visible: { type: Boolean, default: true },
     type: { type: String, default: 'land' },
-    size: { type: Number, default: 1.5 }
+    size: { type: Number, default: 1 }
   },
   computed: {
     opacity() { return this.visible ? 1 : 0.3 },
