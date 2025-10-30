@@ -92,14 +92,26 @@
         <div class="settings-group">
           <h4>Анимация</h4>
           <div class="slider-container">
-            <label>Скорость вращения: {{ settings.autoRotationSpeed.toFixed(1) }}</label>
+            <label>Базовая скорость вращения: {{ settings.baseRotationSpeed.toFixed(1) }}</label>
             <input 
               type="range" 
-              min="0.1" 
-              max="10.0" 
+              min="0.0" 
+              max="5.0" 
               step="0.1"
-              v-model="settings.autoRotationSpeed"
+              v-model="settings.baseRotationSpeed"
               @input="updateSettings"
+            >
+          </div>
+          
+          <div class="slider-container">
+            <label>Плавность вращения: {{ (settings.rotationSmoothness * 100).toFixed(0) }}%</label>
+            <input 
+              type="range" 
+              min="10" 
+              max="100" 
+              step="5"
+              :value="settings.rotationSmoothness * 100"
+              @input="settings.rotationSmoothness = $event.target.value / 100; updateSettings()"
             >
           </div>
           
@@ -165,8 +177,6 @@ export default {
     let animationId = null
     let isDragging = false
     let lastMouseX = 0, lastMouseY = 0
-    let rotationX = 0, rotationY = 0
-    let velocityX = 0, velocityY = 0
     
     // Data containers
     let landPoints = []
@@ -174,6 +184,12 @@ export default {
     let oceanParticles = []
     let landMesh = null
     let oceanMesh = null
+    
+    // Вращение
+    let targetRotationX = 0
+    let targetRotationY = 0
+    let currentRotationX = 0
+    let currentRotationY = 0
     
     // Настройки по умолчанию
     const defaultSettings = {
@@ -185,11 +201,12 @@ export default {
       
       // Внешний вид
       landPointSize: 1.0,
-      citySize: 0.7, // 30% уменьшение от базового
+      citySize: 0.7,
       oceanOpacity: 0.7,
       
-      // Анимация - скорость вращения 3.0 по умолчанию
-      autoRotationSpeed: 3.0,
+      // Анимация - плавное вращение
+      baseRotationSpeed: 1.0, // Базовая скорость вращения
+      rotationSmoothness: 0.8, // Плавность вращения (0-1)
       showOceanCurrents: true,
       showCities: true,
       showLand: true
@@ -198,8 +215,8 @@ export default {
     const settings = reactive({...defaultSettings})
     
     const constants = {
-      friction: 0.95,
-      returnToAutoSpeed: 0.02
+      friction: 0.92, // Меньше трения для более плавного движения
+      dragSensitivity: 0.003 // Чувствительность перетаскивания
     }
 
     // Event handlers
@@ -211,8 +228,17 @@ export default {
 
     const handlePointerMove = (x, y) => {
       if (!isDragging) return
-      velocityX = (x - lastMouseX) * 0.01
-      velocityY = (y - lastMouseY) * 0.01
+      
+      const deltaX = (x - lastMouseX) * constants.dragSensitivity
+      const deltaY = (y - lastMouseY) * constants.dragSensitivity
+      
+      // Плавное обновление целевого вращения
+      targetRotationY += deltaX
+      targetRotationX += deltaY
+      
+      // Ограничиваем вращение по X
+      targetRotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, targetRotationX))
+      
       lastMouseX = x
       lastMouseY = y
     }
@@ -230,9 +256,9 @@ export default {
         ['mousemove', (e) => handlePointerMove(e.clientX, e.clientY)],
         ['mouseup', handlePointerEnd],
         ['wheel', (e) => {
+          // Плавное изменение базовой скорости при скролле
           const factor = e.deltaY > 0 ? 0.9 : 1.1
-          velocityX *= factor
-          velocityY *= factor
+          settings.baseRotationSpeed = Math.max(0, Math.min(5, settings.baseRotationSpeed * factor))
           e.preventDefault()
         }],
         ['touchstart', (e) => {
@@ -276,7 +302,6 @@ export default {
     }
 
     const updateSettings = () => {
-      // Обновляем видимость элементов
       if (landMesh) {
         landMesh.visible = settings.showLand
       }
@@ -288,13 +313,11 @@ export default {
         }
       }
       
-      // Обновляем размеры точек
       if (landMesh && landMesh.material) {
         landMesh.material.size = 0.02 * settings.landPointSize
         landMesh.material.needsUpdate = true
       }
       
-      // Обновляем города
       cityGroups.forEach(city => {
         if (city.group) {
           city.group.visible = settings.showCities
@@ -306,7 +329,6 @@ export default {
         }
       })
       
-      // Если изменилось количество частиц, пересоздаем океан
       if (settings.oceanParticlesCount !== oceanParticles.length && settings.showOceanCurrents) {
         recreateOceanParticles()
       }
@@ -693,18 +715,20 @@ export default {
       })
     }
 
-    const updateRotation = () => {
+    // Плавное обновление вращения
+    const updateRotation = (deltaTime) => {
       if (!isDragging) {
-        velocityX *= constants.friction
-        velocityY *= constants.friction
-        if (Math.abs(velocityX) < 0.0001 && Math.abs(velocityY) < 0.0001) {
-          // Применяем скорость вращения из настроек ко всем объектам
-          velocityX += (settings.autoRotationSpeed - velocityX) * constants.returnToAutoSpeed
-        }
+        // Базовая скорость вращения
+        targetRotationY += settings.baseRotationSpeed * deltaTime * 0.001
       }
-      rotationY += velocityX
-      rotationX += velocityY
-      rotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, rotationX))
+      
+      // Плавная интерполяция между текущим и целевым вращением
+      const smoothFactor = settings.rotationSmoothness * 0.1
+      currentRotationX += (targetRotationX - currentRotationX) * smoothFactor
+      currentRotationY += (targetRotationY - currentRotationY) * smoothFactor
+      
+      // Ограничиваем вращение по X
+      currentRotationX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, currentRotationX))
     }
 
     const animate = (time) => {
@@ -713,14 +737,17 @@ export default {
         return
       }
       
-      updateRotation()
+      const deltaTime = time - (animate.lastTime || time)
+      animate.lastTime = time
+      
+      updateRotation(deltaTime)
       const currentTime = time * 0.001
 
       updateOceanParticles(currentTime)
       updateCityLights(currentTime)
 
-      // Вращаем всю сцену целиком с примененной скоростью вращения
-      scene.rotation.set(rotationX, rotationY, 0)
+      // Применяем плавное вращение ко всей сцене
+      scene.rotation.set(currentRotationX, currentRotationY, 0)
       renderer.render(scene, camera)
       animationId = requestAnimationFrame(animate)
     }
@@ -765,8 +792,9 @@ export default {
 </script>
 
 <style scoped>
+/* Стили остаются без изменений */
 .controls-panel {
-  position: absolute;
+  position: fixed;
   top: 20px;
   right: 20px;
   z-index: 100;
@@ -796,7 +824,7 @@ export default {
 }
 
 .settings-panel {
-  position: fixed;
+  position: absolute;
   top: 70px;
   right: 0;
   width: 320px;
